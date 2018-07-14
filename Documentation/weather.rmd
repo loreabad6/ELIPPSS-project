@@ -1,0 +1,259 @@
+---
+title: "Weather station"
+subtitle: |
+  | Monitoring the Renaturation process of the Aa river in Münster 
+  | Unmmanned Aerial Systems
+  
+author: "senseBox group"
+date: "July 12, 2018"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction 
+
+The weather station objective was to log basic weather variables on the study area, to perform an analysis of their variability within a certain monitoring period. The station was equipped with a Temperature and Relative Humidity sensor, an Air Pressure sensor, an Ambient Light sensor, and an UV sensor. The data was recorded on an SD card while on the field every ten seconds, including a timestamp for each log. 
+
+The construction of the logger required the use of the basic sensors available in the senseBox, the senseBox shield which includes a microSD socket and a Real-Time-Clock, as well as a container to place the built logger in, and to place it on the study area in an isolated manner. Figure 1 shows the logger built and placed on the study area. 
+
+
+![**Fig. 1:** Weather station on the field](E:\GeoTech\2nd\5. UAS\5. Documentation\Weather\weather.jpeg){ width=40% }
+
+A weather station is commonly a set of sensors that collect meteorological variables that provide information about the atmospheric conditions of chosen location, facilitating the analysis of the weather and climate of an area. The renaturation process can benefit from the measurements obtained from the station, as they can help understand variations of microclimate given the ecological changes product of the renaturation process. To do so, the weather station should be placed on the study area for a longer period. 
+
+## Materials
+
+To build this logger, as well as the other loggers for the current project, we made use of the [senseBox:edu toolkit](https://sensebox.de/en/products). For this project, we used the previous senseBox version, therefore, the documentation on the site might have changed, but is still supported. The senseBox used is based on an [Arduino Genuino Uno board](https://www.arduino.cc/en/Guide/BoardAnatomy), on which, an user-friendly and easy-to-learn programming language can be used to configure the logger. The code used for this particular logger can be found on the section [Arduino code].
+
+The materials to build the logger are listed below:
+
+* senseBox:edu box items:
+    * Arduino Genuino Uno board
+    * [senseBox shield](https://learn.watterott.com/sensebox/shield/)
+    * [HDC1080](http://learn.watterott.com/sensors/hdc1080/) Temperature + Humidity sensor
+    * [TSL45315](http://learn.watterott.com/sensors/tsl45315/) Ambient Light Sensor
+    * [VEML6070](http://learn.watterott.com/sensors/veml6070/) UV Sensor
+    * [BMP280](http://learn.watterott.com/sensors/bmp280/) Barometric Pressure + Temperature
+    * Breadboard
+    * Jumper wires
+    * USB cable
+    * AA battery holder
+* 6 AA batteries
+* microSD card
+* Battery CR2032
+
+It would be recommended to place the temperature sensor under a radiation protection device, however, since it was not available, for this station we placed it on the lower face of our container, with sufficient air ciculation so that the container would not produce a greenhouse effect and increase the ambient temperature. The UV and Ambient Light sensors where placed on top of the container with a transparent plastic cover. The container was isolated with sylicon to avoid water contact with the inner connections, in case of rain. 
+
+## Wiring 
+
+The following figure illustrates the wiring of the logger. The illustration was made with the [Fritzing](http://fritzing.org/home/) software. 
+
+**NOTE:** The board used to connect the sensors was the senseBox shield, however, its illustration was not available on Fritzing. The microSD socket and the RV-8523 RTC (I2C Real-Time-Clock) are built onto that shield, and therefore do not appear on the figure. Also, certain sensors might look different on the figure than the ones available on the senseBox, however the wiring is the same. 
+
+![Fig 2: Weather station wiring](E:\GeoTech\2nd\5. UAS\5. Documentation\Weather\WeatherStation_bb.png)
+
+## Arduino code
+
+**NOTE:** The timestamp is recorded by the Real-Time-Clock on the senseBox shield. The time has to be configured only one time when loading the code, and the time can be changed on the setup section of the code, now commented.
+
+```{r arduino code, eval=FALSE}
+/* 
+ * Weather variables data logger saves to an SD card with a timestamp for each record
+ * 
+ * senseBox Group
+ * Unmanned Aerial Systems
+ * Geospatial Technologies MSc.
+ * 
+ * Institute for Geoinformatics, University of Muenster
+ * May. 2018
+*/
+
+#include <Wire.h>
+#include <HDC100X.h>
+#include <BMP280.h>
+#include <Makerblog_TSL45315.h>
+#include <VEML6070.h>
+#include <SPI.h> // library to save to SD card
+#include <SD.h> // library for SD card
+#include <RV8523.h> // library for getting timestamp
+
+#define I2C_ADDR 0x38
+#define IT_1   0x1 //1T
+
+HDC100X HDC(0x43);
+BMP280 BMP;
+VEML6070 VEML;
+Makerblog_TSL45315 TSL = Makerblog_TSL45315(TSL45315_TIME_M4);
+RV8523 rtc;
+
+#define P0 1013.25 // atmospheric pressure 
+double T, P, A, L, UV; // indicates variable gotten from HDC1=T, BMP280=P, Altitude(P-Po)=A
+uint32_t lux;
+byte msb=0, lsb=0;
+uint16_t uv;
+uint8_t sec, min, hour, day, month;
+uint16_t year;
+
+const int chipSelect = 4; 
+
+void setup()
+{
+  //rtc.set(0, 44, 19, 8, 6, 2018); // 13:32:00 18.05.2018 Only use one time
+  rtc.start();
+  Serial.begin(9600);
+  while (!Serial) {
+    ;
+  }
+
+  Serial.println("Starting test...\n");
+  delay(1000);
+  scan();
+  delay(1000);
+  
+  Serial.print("Initializing SD-Card");
+
+  // Check if an SD card is inserted.
+  if (!SD.begin(chipSelect)) {
+    Serial.println("Card not found");
+    return;
+  }
+  Serial.println("Card succesfully initialized");
+  
+  HDC.begin(HDC100X_TEMP_HUMI, HDC100X_14BIT, HDC100X_14BIT, DISABLE);
+  VEML.begin();
+  TSL.begin();
+  BMP.begin();
+  BMP.setOversampling(4);
+
+  File dataFile = SD.open("datalog.csv", FILE_WRITE);
+  dataFile.println(" Timestamp; Temperature(C); Relative Humidity(%); Iluminance (lux); UV-radiation (uW/cm2); Air Pressure (mBar); Height (m) ");
+  dataFile.close();
+}
+
+
+void loop()
+{
+  // Read out the sensors and write the data on SD card
+  File dataFile = SD.open("datalog.csv", FILE_WRITE);
+
+    //RTC-RV8523
+    rtc.get(&sec, &min, &hour, &day, &month, &year); // Read timestamp
+    dataFile.print(month,DEC);
+    dataFile.print("/");
+    dataFile.print(day,DEC);
+    dataFile.print("/");
+    dataFile.print(year,DEC);
+    dataFile.print(" ");
+    dataFile.print(hour,DEC);
+    dataFile.print(":");
+    dataFile.print(min,DEC);
+    dataFile.print(":");
+    dataFile.print(sec);// Save timestamps
+    dataFile.print(";");
+    Serial.print("Timestamp:      ");
+      Serial.print(hour); Serial.print(":"); Serial.print(min); Serial.print(":"); 
+      Serial.print(sec); Serial.print("  "); Serial.print(day); Serial.print(".");
+      Serial.print(month); Serial.print("."); Serial.println(year);
+        
+    //HDC1080
+    float Temp = HDC.getTemp(); // Read temperature
+    dataFile.print(Temp); // Save temperature
+    dataFile.print(";");
+    Serial.print("Temperature:      "); // Show temperature on Serial Monitor
+      Serial.print(HDC.getTemp(),1); Serial.print(" \xC2\xB0"); Serial.println("C");
+    float Humi = HDC.getHumi(); // Read RH
+    dataFile.print(Humi); // Save RH
+    dataFile.print(";");
+    Serial.print("Humidity:         "); 
+      Serial.print(HDC.getHumi(),1); Serial.println(" %");
+
+    //TSL45315
+    float lux = TSL.readLux(); // Read illuminance
+    dataFile.print(lux); // Save illuminance
+    dataFile.print(";");
+    Serial.print("Illuminance:      ");
+    Serial.print(lux, DEC);
+    Serial.println(" lx");
+
+    //VEML6070
+    float uv = VEML.getUV(); // Read UV
+    dataFile.print(uv); // Save UV
+    dataFile.print(";");
+    Serial.print("UV radiation:     "); 
+      Serial.print(uv, DEC); Serial.println(" uW/cm2");
+    
+    //BMP280
+    char result = BMP.startMeasurment(); 
+    result = BMP.getTemperatureAndPressure(T,P);
+    double A = BMP.altitude(P,P0);
+    if(result!=0)
+      {
+        double A = BMP.altitude(P,P0);
+        
+        Serial.print("Air pressure:     "); 
+          Serial.print(P, 2); Serial.println(" mBar");
+        Serial.print("Height:     "); 
+          Serial.print(A, 2); Serial.println(" m");
+      }
+    dataFile.print(P);
+    dataFile.print(";");
+    dataFile.print(A);
+    dataFile.print(";");  
+    dataFile.println();  
+    
+  // When the file is open
+  if (dataFile) {
+    dataFile.close();
+  }
+  // If the file can not be opened, an error message should be issued
+  else {
+    Serial.println("Error opening!");
+  }
+  delay(10000); //Interval of saving and reading: now set to 10 seconds 
+}
+
+void scan(void)
+{
+  byte error, address;
+
+  Serial.println("Looking for devices...");
+
+  Wire.begin();
+  for(address = 1; address < 127; address++ )
+  {
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+ 
+    if(error == 0)
+    {
+      Serial.print("Device found: 0x");
+      if(address<16)
+        Serial.print("0");
+      Serial.println(address,HEX);
+    }
+    else if(error==4)
+    {
+      Serial.print("Error: 0x");
+      if(address<16)
+        Serial.print("0");
+      Serial.println(address,HEX);
+    }
+  }
+  Serial.println("");
+}
+```
+
+## Example of output
+
+This is an example of the output data logged with the code loaded to the logger. Note that the height value is a function of the air pressure recorded by the barometer. It is recommended to double check this value, given that it is not always correct. Also, a power cut on the logger may resert the clock recording the timestamp. Therefore, cleaning the data is highly recommended. 
+
+```{r example, echo=FALSE}
+head(read.csv("E:/GeoTech/2nd/5. UAS/5. Documentation/Weather/WEATHER1.csv"))
+```

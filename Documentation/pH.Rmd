@@ -1,0 +1,129 @@
+---
+title: "Water pH logger"
+subtitle: |
+  | Monitoring the Renaturation process of the Aa river in Münster 
+  | Unmmanned Aerial Systems
+  
+author: "senseBox group"
+date: "July 12, 2018"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Introduction 
+
+![**Fig. 1:** Water pH logger on the field](E:\GeoTech\2nd\5. UAS\5. Documentation\WaterpH\pH.jpeg){ width=40% }
+
+## Materials
+
+To build this logger, as well as the other loggers for the current project, we made use of the [senseBox:edu toolkit](https://sensebox.de/en/products). For this project, we used the previous senseBox version, therefore, the documentation on the site might have changed, but is still supported. The senseBox used is based on an [Arduino Genuino Uno board](https://www.arduino.cc/en/Guide/BoardAnatomy), on which, an user-friendly and easy-to-learn programming language can be used to configure the logger. The code used for this particular logger can be found on the section [Arduino code].
+
+The materials to build the logger are listed below:
+
+* senseBox:edu box items:
+    * Arduino Genuino Uno board
+    * Breadboard
+    * Jumper wires
+    * USB cable
+    * AA battery holder
+* [SKU:FIT0348](https://www.dfrobot.com/wiki/index.php/Industrial_pH_electrode(SKU:FIT0348)) pH electrode
+* [DFR0009](https://www.dfrobot.com/wiki/index.php/LCD_KeyPad_Shield_For_Arduino_SKU:_DFR0009) LCD Keypad shield 
+* 6 AA batteries
+
+## Wiring 
+
+![**Fig. 2:** Water pH logger wiring](E:\GeoTech\2nd\5. UAS\5. Documentation\WaterpH\wiring_ph.jpg)
+
+## Arduino code
+```{r arduino code, eval=FALSE}
+/* 
+ * pH data logger saves to an SD card with a timestamp for each record
+ * 
+ * senseBox Group
+ * Unmanned Aerial Systems
+ * Geospatial Technologies MSc.
+ * 
+ * Institute for Geoinformatics, University of Muenster
+ * May. 2018
+*/
+#include <LiquidCrystal.h>
+#define SensorPin A0    // pH meter Analog output an Arduino Analog Input A0
+#define Offset 0.33     // deviation compensate
+
+unsigned long int avgValue;  // Save the average values of the sensor
+float b;
+int buf[10], temp;
+
+//Pin assignments for DFRobot LCD Keypad Shield
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7); 
+//---------------------------------------------
+
+void setup() {
+  //LCD configuration
+  lcd.begin(16, 2); // row and lines
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("senseBox Group 2018");
+  lcd.setCursor(1, 1);
+  lcd.print("  PH");
+// scroll 13 positions (string length) to the left
+  // to move it offscreen left:
+  for (int positionCounter = 0; positionCounter < 13; positionCounter++) {
+    // scroll one position left:
+    lcd.scrollDisplayLeft();
+    // wait a bit:
+    delay(300);
+  }
+  pinMode(13, OUTPUT);  
+}
+
+void loop() {
+
+  for(int i = 0; i < 10; i++) {     // Take 10 measurements to average 
+    buf[i] = analogRead(SensorPin);
+    delay(10);
+  }
+
+  for(int i = 0; i < 9; i++) {      // sort the measured values by height
+    for(int j = i+1; j < 10; j++) {
+      if(buf[i] > buf[j]) {
+        temp = buf[i];
+        buf[i] = buf[j];
+        buf[j] = temp;
+      }
+    }
+  }
+
+   // Take the mean 6 readings and calculate the mean
+  avgValue = 0;
+  for(int i = 2; i < 8; i++) {                     
+    avgValue += buf[i];
+  }
+
+  // Conversion of the input value in millivolts
+  float voltage = (float)avgValue * 5.0 / 1024 / 6;
+  // Conversion of the value of millivolts into the pH scale
+  float phValue = 3.5 * voltage + Offset;
+
+  Serial.print("    pH:");  
+  Serial.print(phValue, 2);
+  Serial.println(" ");
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("PH: ");
+  lcd.print(phValue, 2);
+  digitalWrite(13, HIGH);       
+  delay(800);
+  digitalWrite(13, LOW);
+
+  delay(800);
+}
+```

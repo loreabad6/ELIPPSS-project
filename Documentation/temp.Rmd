@@ -1,0 +1,155 @@
+---
+title: "Water Temperature logger"
+subtitle: |
+  | Monitoring the Renaturation process of the Aa river in Münster 
+  | Unmmanned Aerial Systems
+  
+author: "senseBox group"
+date: "July 12, 2018"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Introduction 
+
+![**Fig. 1:** Water temperature logger on the field](E:\GeoTech\2nd\5. UAS\5. Documentation\WaterTemperature\temp.jpeg){ width=40% }
+
+## Materials
+
+To build this logger, as well as the other loggers for the current project, we made use of the [senseBox:edu toolkit](https://sensebox.de/en/products). For this project, we used the previous senseBox version, therefore, the documentation on the site might have changed, but is still supported. The senseBox used is based on an [Arduino Genuino Uno board](https://www.arduino.cc/en/Guide/BoardAnatomy), on which, an user-friendly and easy-to-learn programming language can be used to configure the logger. The code used for this particular logger can be found on the section [Arduino code].
+
+The materials to build the logger are listed below:
+
+* senseBox:edu box items:
+    * Arduino Genuino Uno board
+    * Breadboard
+    * Jumper wires
+    * USB cable
+    * AA battery holder
+* 2 [DS18b20](https://cdn.sparkfun.com/datasheets/Sensors/Temp/DS18B20.pdf) Waterproof Temperature sensor
+* [DFR0009](https://www.dfrobot.com/wiki/index.php/LCD_KeyPad_Shield_For_Arduino_SKU:_DFR0009) LCD Keypad shield 
+* 6 AA batteries
+
+Two water temperature sensors were used, in case of failure of one.
+
+## Wiring 
+
+The following figure illustrates the wiring of the logger. The illustration was made with the [Fritzing](http://fritzing.org/home/) software. 
+
+![**Fig. 2:** Water temperature logger wiring](E:\GeoTech\2nd\5. UAS\5. Documentation\WaterTemperature\Water_temp_LCD.png)
+
+## Arduino code
+```{r arduino code, eval=FALSE}
+/* 
+ * Water temperature data logger saves to an SD card with a timestamp for each record
+ * 
+ * senseBox Group
+ * Unmanned Aerial Systems
+ * Geospatial Technologies MSc.
+ * 
+ * Institute for Geoinformatics, University of Muenster
+ * May. 2018
+*/
+
+
+// First we include the libraries
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <LiquidCrystal.h>
+
+//Pin assignments for DFRobot LCD Keypad Shield
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7); 
+
+// Data wire is plugged into pin 2 on the Arduino
+#define ONE_WIRE_BUS 2
+
+// Setup a oneWire instance to communicate with any OneWire devices  
+// (not just Maxim/Dallas temperature ICs)
+OneWire oneWire(ONE_WIRE_BUS);
+
+// Pass our oneWire reference to Dallas Temperature.
+DallasTemperature sensors(&oneWire);
+
+
+void setup() {
+  //LCD configuration
+  lcd.begin(16, 2);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("senseBox Group 2018");
+  lcd.setCursor(0, 1);
+  lcd.print(" Water Temperature");
+// scroll 13 positions (string length) to the left
+  // to move it offscreen left:
+  for (int positionCounter = 0; positionCounter < 13; positionCounter++) {
+    // scroll one position left:
+    lcd.scrollDisplayLeft();
+    // wait a bit:
+    delay(300);
+  }
+
+  // scroll 29 positions (string length + display length) to the right
+  // to move it offscreen right:
+  for (int positionCounter = 0; positionCounter < 29; positionCounter++) {
+    // scroll one position right:
+    lcd.scrollDisplayRight();
+    // wait a bit:
+    delay(300);
+  }
+
+  // scroll 16 positions (display length + string length) to the left
+  // to move it back to center:
+  for (int positionCounter = 0; positionCounter < 16; positionCounter++) {
+    // scroll one position left:
+    lcd.scrollDisplayLeft();
+    // wait a bit:
+    delay(300);
+  }
+
+  // delay at the end of the full loop:
+  delay(1000);
+
+
+  
+  // rtc.set(0, 32, 13, 18, 5, 2018); // 13:32:00 18.05.2018 Only use one time
+  rtc.start();
+  Serial.begin(9600);
+  while (!Serial) {
+    ;
+  }
+}
+
+void loop() {
+
+   // call sensors.requestTemperatures() to issue a global temperature
+   // request to all devices on the bus
+    sensors.requestTemperatures(); // Send the command to get temperature readings
+  
+    Serial.print("Temperature 0: ");
+    Serial.println(sensors.getTempCByIndex(0));
+    Serial.print("Temperature 1: ");
+    Serial.println(sensors.getTempCByIndex(1)); 
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Temp 0: ");
+    lcd.print(sensors.getTempCByIndex(0));
+    lcd.setCursor(0, 1);
+    lcd.print("Temp 1: ");
+    lcd.print(sensors.getTempCByIndex(1)); 
+        
+    // Why "byIndex"?  
+    // You can have more than one DS18B20 on the same bus.  
+    // 0 refers to the first IC on the wire
+  delay(5000);
+
+}
+```

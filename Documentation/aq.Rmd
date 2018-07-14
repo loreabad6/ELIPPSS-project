@@ -1,0 +1,229 @@
+---
+title: "Air Quality Logger"
+subtitle: |
+  | Monitoring the Renaturation process of the Aa river in Münster 
+  | Unmmanned Aerial Systems
+  
+author: "senseBox group"
+date: "July 12, 2018"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction 
+
+The air quality logger objective was to generate a vertical profile of two air pollutant agents: PM2.5 and PM10. To do so, the logger was mounted on a drone, and was manually controlled to perform vertical flights on two locations within the study area. 
+
+Therefore, the construction of the logger required not only the use of low cost sensors to record the pollutant values, but also a GPS module, to record latitude, longitude, altitude, and date-time, as well as a 3D printed case to carry the equipment and allow its mounting on the drone gimble.
+
+The resulting logger (Fig. 1) is a compact combination of all this elements, which can be used not only as a vertical air pollution logger, but also as a logger to be mounted on a bike or any other transport mode, and perform analysis on particulate matter exposure. 
+
+![**Fig. 1:** Air Quality Logger](E:\GeoTech\2nd\5. UAS\5. Documentation\AirQuality\AQ.jpg){ width=40% }
+
+Particulate matter (PM) is a mixture of small particles and water droplets in the air, which, when inhaled, can lead to dangerous health effects, affecting the heart and lungs (EPA, 2017). It is classified by its size, therefore PM10 stands for particulate matter with a diameter less than 10 microns, and PM2.5 for particulate matter with a diameter less than 2.5 microns. PM has a high interaction capacity with the earth atmosphere, and therefore impacts on biotic aspects like photosynthetic activity inhibition in plants, and physical integrity affections for surrounding fauna (Grantz, Garner, & Johnson, 2003).
+
+## Materials
+
+To build this logger, as well as the other loggers for the current project, we made use of the [senseBox:edu toolkit](https://sensebox.de/en/products). For this project, we used the previous senseBox version, therefore, the documentation on the site might have changed, but is still supported. The senseBox used is based on an [Arduino Genuino Uno board](https://www.arduino.cc/en/Guide/BoardAnatomy), on which, an user-friendly and easy-to-learn programming language can be used to configure the logger. The code used for this particular logger can be found on the section [Arduino code].
+
+The materials to build the logger are listed below:
+
+* senseBox:edu box items:
+    * Arduino Genuino Uno board
+    * [senseBox shield](https://learn.watterott.com/sensebox/shield/)
+    * [HDC1080](http://learn.watterott.com/sensors/hdc1080/) Temperature + Humidity sensor
+    * JST cable
+    * Jumper wires
+    * USB cable
+    * AA battery holder
+* [SDS011](http://aqicn.org/sensor/sds011/es/) Fine Particular Matter (PM10 & PM2.5)
+* GPS module EM-506
+* 6 AA batteries
+* microSD card
+
+The temperature and humidity sensor was added to the logger given that the fine particulate matter sensor is highly sensitive to humidity, and therefore, it is recommended to relate the values logged with relative humidity. 
+
+## Wiring 
+
+The following figure illustrates the wiring of the logger. The illustration was made with the [Fritzing](http://fritzing.org/home/) software. 
+
+**NOTE:** The board used to connect the sensors was the senseBox shield, however, its illustration was not available on Fritzing. The microSD socket is built onto that shiled and the SDS011 sensor is connected to it, and therefore do not appear on the figure. Also, certain sensors might look different on the figure than the ones available on the senseBox, however the wiring is the same. 
+
+![**Fig. 2:** Air Quality Logger wiring](E:\GeoTech\2nd\5. UAS\5. Documentation\AirQuality\AirQuality_bb.png)
+
+## 3D printed case
+
+To mount the logger on the drone, a case was designed and 3D printed. Its model can be seen on the following figure. The [TinkerCAD](https://www.tinkercad.com/) software was used for it. 
+
+![**Fig. 3:** 3D printed case for Air Quality Logger](E:\GeoTech\2nd\5. UAS\5. Documentation\AirQuality\3Dcase.png)
+
+## Arduino code
+
+**NOTE:** Before loading the code to the Arduino Genuino Uno board, unplug the SDS011 sensor. 
+
+```{r arduino code, eval=FALSE}
+/* 
+ * PM2.5 and PM10, Temp., RH data logger saves to an SD card with GPS time and location
+ * 
+ * senseBox Group
+ * Unmanned Aerial Systems
+ * Geospatial Technologies MSc.
+ * 
+ * Institute for Geoinformatics, University of Muenster
+ * June. 2018
+*/
+
+#include <SDS011-select-serial.h>
+#include <SPI.h> // library to save to SD card
+#include <SD.h>
+#include <HDC100X.h>
+#include <TinyGPS++.h>
+#include <AltSoftSerial.h>
+
+float p10,p25;
+int error;
+unsigned long logInt;
+
+TinyGPSPlus gps;
+
+AltSoftSerial ss;
+
+SDS011 SDS(aq);
+HDC100X HDC(0x43);
+
+const int chipSelect = 4; 
+
+void setup() {
+
+  aq.begin(9600);
+  ss.begin(9600);
+
+  // Check if an SD card is inserted.
+  if (!SD.begin(chipSelect)) {
+    return;
+  }
+
+  HDC.begin(HDC100X_TEMP_HUMI, HDC100X_14BIT, HDC100X_14BIT, DISABLE);
+
+  File dataFile = SD.open("datalog.csv", FILE_WRITE);
+  dataFile.println(F(" PM2.5(mg/m3); PM10(mg/m3); Temperature(C); Relative Humidity(%); Longitude; Latitude; Altitude(m); Time "));
+  dataFile.close();
+
+  delay(60000);
+}
+
+void loop() {
+  if ((millis()-logInt)>10000){
+    // Read out the sensors and write the data on SD card
+    File dataFile = SD.open("datalog.csv", FILE_WRITE);
+    
+      //SDS011
+      delay(2);
+      error = SDS.read(&p25,&p10);
+      if (! error) {
+        dataFile.print(p25);
+        dataFile.print(F(";"));
+        dataFile.print(p10);
+        dataFile.print(F(";"));
+      }
+      else
+      {
+        dataFile.print(F("NA"));
+        dataFile.print(F(";"));
+        dataFile.print(F("NA"));
+        dataFile.print(F(";"));
+      }
+      delay(1);
+      
+      //HDC1080
+      float Temp = HDC.getTemp(); // Read temperature
+      dataFile.print(Temp); // Save temperature
+      dataFile.print(F(";"));
+      float Humi = HDC.getHumi(); // Read RH
+      dataFile.print(Humi); // Save RH
+      dataFile.print(F(";"));
+     
+     //TinyGPS
+      delay(2);
+      while (ss.available() > 0){
+        if (gps.encode(ss.read()))
+          {
+            if (gps.location.isValid())
+            {
+              dataFile.print(gps.location.lng(), 5);
+              dataFile.print(F(";"));
+              dataFile.print(gps.location.lat(), 5);
+              dataFile.print(F(";"));
+            }
+            else
+            {
+              dataFile.print(F("NA"));
+              dataFile.print(F(";"));
+              dataFile.print(F("NA"));
+              dataFile.print(F(";"));
+            }
+            if (gps.altitude.isValid())
+            {
+              dataFile.print(gps.altitude.meters(), 3);
+              dataFile.print(F(";"));  
+            }
+            else
+            {
+              dataFile.print(F("NA"));
+              dataFile.print(F(";"));  
+            }  
+            if (gps.time.isValid())
+            {
+              dataFile.print(gps.time.hour());
+              dataFile.print(F(":"));
+              dataFile.print(gps.time.minute());
+              dataFile.print(F(":"));
+              dataFile.print(gps.time.second());
+              dataFile.print(F(";"));
+            }
+            else
+            {
+              dataFile.print(F("NA"));
+              dataFile.print(F(";"));
+            }  
+          }
+      }
+      if (millis() > 5000 && gps.charsProcessed() < 10)
+      {
+        dataFile.print(F("NaN"));
+        dataFile.print(F(";"));        
+        dataFile.print(F("NaN"));
+        dataFile.print(F(";")); 
+        dataFile.print(F("NaN"));
+        dataFile.print(F(";"));
+      }
+      delay(1);     
+    dataFile.println();
+    // When the file is open
+    if (dataFile) {
+      dataFile.close();
+    }
+    logInt = millis();
+  }
+}
+```
+
+## Example of output
+
+This is an example of the output data logged with the code loaded to the logger. Note that sometimes the GPS might have reception problems, generating a double registration of longitude and latitude values. Also note that the altitude recorded might not be so accurate, depending of course on the GPS module used. Therefore, cleaning the data is highly recommended. 
+
+```{r example, echo=FALSE}
+head(read.csv("E:/GeoTech/2nd/5. UAS/5. Documentation/AirQuality/AQ.csv"))
+```
+
+## References
+* EPA. (2017). Particulate Matter (PM) pollution. Retrieved from https://www.epa.gov/pm-pollution
+
+* Grantz, D., Garner, J. H., & Johnson, D. (2003). Ecological effects of particulate matter. Environment International, 29(2-3), 213–239. http://doi.org/10.1016/S0160-4120(02)00181-2 
